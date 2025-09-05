@@ -49,7 +49,7 @@ class NaverSeleniumSpider(scrapy.Spider):
             # 2. Cuộn đến khu vực đó và chờ một chút để ổn định
             self.log("Cuộn đến QNA...")
             driver.execute_script("arguments[0].scrollIntoView({ behavior: 'smooth', block: 'start' });", qna_tab)
-            time.sleep(1) # Một khoảng sleep ngắn sau khi cuộn là chấp nhận được
+            time.sleep(1)
 
             # 3. Chờ cho đến khi tab REVIEW có thể click được
             self.log("Chờ tab REVIEW có thể click...")
@@ -58,20 +58,24 @@ class NaverSeleniumSpider(scrapy.Spider):
 
             # 4. Chờ cho đến khi nút sắp xếp 'Mới nhất' có thể click được
             self.log("Chờ nút 'Mới nhất' có thể click...")
-            # Sử dụng XPath để đáng tin cậy hơn
             recent_button = wait.until(EC.element_to_be_clickable((By.XPATH, "//a[contains(text(), '최신순')]")))
             
             # Cuộn để đảm bảo nút nằm giữa màn hình
             driver.execute_script("arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });", recent_button)
             time.sleep(1)
-            
             recent_button.click()
-            self.log(">>> Tương tác thành công mà không có lỗi 'not intractable'. <<<")
 
-            # Giữ cửa sổ mở để quan sát
-            time.sleep(30)
+            review_elements = []
+            REVIEW_LIST_SELECTOR = "div#REVIEW li[data-shp-area='revlist.review']"
 
-            yield {'status': 'success'}
+            review_elements = wait.until(
+                EC.presence_of_all_elements_located((By.CSS_SELECTOR, REVIEW_LIST_SELECTOR))
+            )
+
+            for review_el in review_elements:
+                date_el = review_el.find_element(By.CSS_SELECTOR, "div > div > div > div strong+span")
+                date_text = date_el.text.strip() if date_el else None
+
 
         except Exception as e:
             self.log(f"Lỗi trong quá trình xử lý của Selenium: {e}")
