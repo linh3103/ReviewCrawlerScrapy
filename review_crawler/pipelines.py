@@ -1,16 +1,21 @@
 import pandas as pd
 from review_crawler.items import ReviewWithOptionItem
+from review_crawler.helpers.DateHelper import format_date_str
 
 class ProcessReviewOptionPipeline:
     def process_item(self, item, spider):
         if spider.name == 'coupang_reviews':
-            return self.process_coupang_option(item)
+            return self.process_coupang_item(item)
         
         elif spider.name == 'ohouse_reviews':
-            return self.process_ohouse_option(item)
+            return self.process_ohouse_item(item)
+        
+        elif spider.name == 'naver_reviews':
+            return self.process_naver_item(item)
+        
         return item
 
-    def process_coupang_option(self, item):
+    def process_coupang_item(self, item):
         item_name = item.get('item_name', '')
         optionItem = ReviewWithOptionItem()
         optionItem['date'] = item.get('date')
@@ -23,7 +28,7 @@ class ProcessReviewOptionPipeline:
         optionItem['options'] = options_dict
         return optionItem
     
-    def process_ohouse_option(self, item):
+    def process_ohouse_item(self, item):
         optionItem = ReviewWithOptionItem()
         optionItem['date'] = item.get('date')
         optionItem['rating'] = item.get('rating')
@@ -53,6 +58,25 @@ class ProcessReviewOptionPipeline:
         optionItem['options'] = options_dict
 
         return optionItem
+
+    def process_naver_item(self, item):
+        optionItem = ReviewWithOptionItem()
+        optionItem['date'] = format_date_str(item.get('date'))
+        optionItem['rating'] = item.get('rating')
+
+        option_parts= item.get('item_name').split(' / ')
+        options_dict = {}
+
+        for part in option_parts:
+            option = part.strip()
+            if ':' in option:
+                key, value = option.split(':', 1)
+                options_dict[key.strip()] = value.strip()
+
+        optionItem['options'] = options_dict
+
+        return optionItem
+
 
 class ExcelExportPipeline:
     def __init__(self):
