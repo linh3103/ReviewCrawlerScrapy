@@ -77,7 +77,6 @@ class ProcessReviewOptionPipeline:
 
         return optionItem
 
-
 class ExcelExportPipeline:
     def __init__(self):
         self.reviews = []

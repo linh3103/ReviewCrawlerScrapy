@@ -9,107 +9,118 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from review_crawler.items import ReviewItem
+from selenium.common.exceptions import NoSuchElementException, TimeoutException
 
 class NaverSeleniumSpider(scrapy.Spider):
     name = 'naver_reviews'
+    middleware_flags = ["use_selenium"]
 
-    def __init__(self, product_id=None, *args, **kwargs):
+
+    NAVER_STORES = {
+        "바자르": "https://brand.naver.com/bazaar/products/",
+        "라뽐므": "https://brand.naver.com/lapomme/products/",
+        "쁘리엘르": "https://brand.naver.com/prielle/products/",
+        "마틸라": "https://brand.naver.com/maatila/products/",
+        "그래이불": "https://brand.naver.com/yesbedding/products/",
+        "믹스앤매치": "https://brand.naver.com/mixandmatch/products/",
+        "누비지오": "https://brand.naver.com/nubizio/products/",
+        "데코뷰": "https://brand.naver.com/decoview/products/",
+        "깃든": "https://brand.naver.com/gitden/products/",
+        "스타일링홈": "https://brand.naver.com/styhome/products/",
+        "아망떼": "https://brand.naver.com/amante/products/",
+        "호무로": "https://brand.naver.com/homuro/products/",
+        "헬로우슬립": "https://brand.naver.com/hellosleep/products/",
+        "오넬로이": "https://smartstore.naver.com/oneloi/products/",
+        "플로라": "https://brand.naver.com/flora/products/",
+        "르올": "https://smartstore.naver.com/mewansungmall/products/",
+        "에이트룸": "https://brand.naver.com/8room/products/",
+        "베이직톤": "https://brand.naver.com/basictone/products/",
+        "아토앤알로": "https://brand.naver.com/beddingnara/products/",
+        "바숨": "https://brand.naver.com/busum/products/",
+        "올리비아데코": "https://brand.naver.com/oliviadeco/products/",
+        "코지네스트": "https://brand.naver.com/cozynest/products/",
+        "메종오트몬드": "https://smartstore.naver.com/hautemonde/products/",
+        "바운티풀": "https://brand.naver.com/bountiful/products/",
+        "도아드림": "https://brand.naver.com/doadream_goose/products/",
+        "CROWN GOOSE": "https://brand.naver.com/crowngoose/products/"
+    }
+
+    custom_settings = {
+        "DOWNLOADER_MIDDLEWARES": {
+            "review_crawler.middlewares.NaverSeleniumMiddleware": 543,
+        }
+    }
+
+    def __init__(self, product_id=None, brand_name=None, *args, **kwargs):
         super(NaverSeleniumSpider, self).__init__(*args, **kwargs)
         if not product_id:
             raise ValueError("Vui lòng cung cấp product_id...")
+        
+        self.brand_name = brand_name
         self.product_id = product_id
-        self.start_urls = [f'https://brand.naver.com/8room/products/{product_id}']
-        self.total_reviews = 0
-        self.limit_reviews = 300
+        self.limit_reviews = 500
+        self.collected_reviews_count = 0
+        self.current_page = 1
     
+    def start_requests(self):
+
+        brand_url = self.NAVER_STORES.get(self.brand_name)
+        target_url = f"{brand_url}{self.product_id}"
+
+        yield scrapy.Request(
+            url=target_url,
+            callback=self.parse,
+            meta={
+                "use_selenium": True
+            }
+        )
+
     def parse(self, response):
-        target_url = response.url
-        options = uc.ChromeOptions()
-        options.add_argument("--no-sandbox")
-        options.add_argument("--disable-gpu")
-        options.add_argument(f'--lang=ko-KR')
-        options.add_argument("--blink-settings=imagesEnabled=false")
-        options.add_argument("--disable-blink-features=AutomationControlled")
-        
-        driver = None
-        try:
-            chrome_version = get_chrome_major_version()
-            if not chrome_version:
-                raise ValueError("Không thể xác định phiên bản Chrome hiện tại trên hệ thống.")
+        REVIEW_LIST_SELECTOR = "li[data-shp-area='revlist.review']"
+        reviews_in_page = response.css(REVIEW_LIST_SELECTOR)
 
-            driver = uc.Chrome(
-                options=options, 
-                use_subprocess=True,
-                version_main=chrome_version
+        if not reviews_in_page:
+            self.logger.info("No more reviews found. Stopping pagination.")
+            return
+
+        for review in reviews_in_page:
+            review_date_str = review.css("div > div > div > div strong+span::text").get()
+            review_date = None
+            if review_date_str:
+                review_date = review_date_str.rstrip(".")
+
+            if not review_date:
+                continue
+
+            rating = review.css("div > div > div > div > em::text").get()
+
+            full_option_review = review.xpath('string(.//div[strong and span]/following-sibling::*[1])').get()
+            item_name = full_option_review.strip().split('\n')[0] if full_option_review else None
+
+            review_item = ReviewItem()
+            review_item["date"] = review_date
+            review_item["rating"] = rating
+            review_item["item_name"] = item_name
+
+            yield review_item
+            self.collected_reviews_count += 1
+
+            if self.collected_reviews_count >= self.limit_reviews:
+                break
+
+        if self.collected_reviews_count < self.limit_reviews:
+            self.current_page += 1
+            yield scrapy.Request(
+                url=response.request.url,
+                callback=self.parse,
+                meta={
+                    "use_selenium":True,
+                    "click_next_page": True,
+                    "page_to_click": self.current_page
+                },
+                dont_filter=True
             )
-            
-            driver.get(target_url)
-            wait = WebDriverWait(driver, 15)
-        
-            qna_tab = wait.until(EC.presence_of_element_located((By.ID, "QNA")))
-            
-            driver.execute_script("arguments[0].scrollIntoView({ behavior: 'smooth', block: 'start' });", qna_tab)
-            time.sleep(1)
 
-            review_tab = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "div#_productFloatingTab ul li a[data-name='REVIEW']")))
-            review_tab.click()
 
-            recent_button = wait.until(EC.element_to_be_clickable((By.XPATH, "//a[contains(text(), '최신순')]")))
-            
-            driver.execute_script("arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });", recent_button)
-            time.sleep(1)
-            recent_button.click()
 
-            PAGINATION_SELECTOR = "div[data-shp-area='revlist.pgn']"
-            pagination_element = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, PAGINATION_SELECTOR)))
-            driver.execute_script("arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });", pagination_element)
-            time.sleep(1)
 
-            page = 1
-            should_stop = False
-            while self.total_reviews < self.limit_reviews and not should_stop:
-                REVIEW_LIST_SELECTOR = "div#REVIEW li[data-shp-area='revlist.review']"
-                review_elements = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, REVIEW_LIST_SELECTOR)))
-
-                if review_elements:
-                    for review in review_elements:
-                        date = review.find_element(By.CSS_SELECTOR, "div > div > div > div strong+span").text.rstrip(".")
-
-                        rating = review.find_element(By.CSS_SELECTOR, "div > div > div > div > em").text.strip()
-
-                        prev_element_options = review.find_element(
-                            By.CSS_SELECTOR, "div > div > div > div strong+span"
-                        ).find_element(By.XPATH, "..")
-
-                        full_option_review = prev_element_options.find_element(
-                            By.XPATH, "following-sibling::*[1]"
-                        ).text
-
-                        item_name = full_option_review.split('\n')[0].strip()
-
-                        item = ReviewItem()
-                        item['date'] = date
-                        item['rating'] = rating
-                        item['item_name'] = item_name
-
-                        yield(item)
-                        self.total_reviews += 1
-                        if self.total_reviews >= self.limit_reviews:
-                            should_stop = True
-                            break
-
-                page += 1
-                next_page_selector = f"div#REVIEW div[data-shp-area-id='pgn'] a[data-shp-contents-id='{page}']"
-                next_page_element = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, next_page_selector)))
-                next_page_element.click()
-                time.sleep(1)
-
-        except Exception as e:
-            self.log(f"Lỗi trong quá trình xử lý của Selenium: {e}")
-            if driver:
-                driver.save_screenshot('selenium_error.png')
-            yield {'status': 'failed'}
-        finally:
-            if driver:
-                driver.quit()
-                self.log("Đã đóng trình duyệt.")

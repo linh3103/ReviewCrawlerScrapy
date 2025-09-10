@@ -36,11 +36,14 @@ pyOpenSSL==25.1.0
 PySocks==1.7.1
 python-dateutil==2.9.0.post0
 pytz==2025.2
+pywin32==311
 queuelib==1.8.0
 requests==2.32.5
 requests-file==2.1.0
 Scrapy==2.13.3
 scrapy-playwright==0.0.44
+scrapyd==1.6.0
+scrapyd-client==2.0.3
 selenium==4.35.0
 service-identity==24.2.0
 six==1.17.0
@@ -53,6 +56,7 @@ trio-websocket==0.12.2
 Twisted==25.5.0
 typing_extensions==4.14.1
 tzdata==2025.2
+uberegg==0.1.1
 undetected-chromedriver==3.5.5
 urllib3==2.5.0
 w3lib==2.3.1
