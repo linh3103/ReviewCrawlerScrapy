@@ -1,15 +1,7 @@
 # Đảm bảo đoạn code sửa lỗi Windows vẫn ở đầu file
-from asyncio import wait
+import json
 import scrapy
-import undetected_chromedriver as uc
-from scrapy.selector import Selector
-import time
-from review_crawler.helpers.ChromeVerHelper import get_chrome_major_version
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
 from review_crawler.items import ReviewItem
-from selenium.common.exceptions import NoSuchElementException, TimeoutException
 
 class NaverSeleniumSpider(scrapy.Spider):
     name = 'naver_reviews'
@@ -51,33 +43,45 @@ class NaverSeleniumSpider(scrapy.Spider):
         }
     }
 
-    def __init__(self, product_id=None, brand_name=None, *args, **kwargs):
+    def __init__(self, brands_products=None, *args, **kwargs):
         super(NaverSeleniumSpider, self).__init__(*args, **kwargs)
-        if not product_id:
-            raise ValueError("Vui lòng cung cấp product_id...")
+        # if not brands_products:
+        #     raise ValueError("Vui lòng cung cấp product_id...")
         
-        self.brand_name = brand_name
-        self.product_id = product_id
-        self.limit_reviews = 500
-        self.collected_reviews_count = 0
-        self.current_page = 1
+        json_str = '{"아토앤알로": [226613999,2007829417]}'
+        self.brands_products = json.loads(json_str)
+        self.limit_reviews = 100
     
     def start_requests(self):
+        for brand_name, product_ids in self.brands_products.items():
+            brand_url = self.NAVER_STORES.get(brand_name)
+            if not brand_url:
+                continue
 
-        brand_url = self.NAVER_STORES.get(self.brand_name)
-        target_url = f"{brand_url}{self.product_id}"
+            for product_id in product_ids:
+                self.product_id = product_id
+                target_url = f"{brand_url}{product_id}"
 
-        yield scrapy.Request(
-            url=target_url,
-            callback=self.parse,
-            meta={
-                "use_selenium": True
-            }
-        )
-
+                yield scrapy.Request(
+                    url=target_url,
+                    callback=self.parse,
+                    meta={
+                        "use_selenium": True,
+                        "current_page": 1,
+                        "collected_reviews_count": 0,
+                        "brand_name": brand_name,
+                        "product_id": product_id
+                    }
+                )
+        
     def parse(self, response):
         REVIEW_LIST_SELECTOR = "li[data-shp-area='revlist.review']"
         reviews_in_page = response.css(REVIEW_LIST_SELECTOR)
+
+        collected_reviews_count = response.meta.get("collected_reviews_count")
+        current_page = response.meta.get("current_page")
+        brand_name = response.meta.get("brand_name")
+        product_id = response.meta.get("product_id")
 
         if not reviews_in_page:
             self.logger.info("No more reviews found. Stopping pagination.")
@@ -103,20 +107,23 @@ class NaverSeleniumSpider(scrapy.Spider):
             review_item["item_name"] = item_name
 
             yield review_item
-            self.collected_reviews_count += 1
+            collected_reviews_count += 1
 
-            if self.collected_reviews_count >= self.limit_reviews:
+            if collected_reviews_count >= self.limit_reviews:
                 break
 
-        if self.collected_reviews_count < self.limit_reviews:
-            self.current_page += 1
+        if  collected_reviews_count < self.limit_reviews:
+            next_page = current_page + 1
             yield scrapy.Request(
                 url=response.request.url,
                 callback=self.parse,
                 meta={
                     "use_selenium":True,
                     "click_next_page": True,
-                    "page_to_click": self.current_page
+                    "current_page": next_page,
+                    "collected_reviews_count": collected_reviews_count,
+                    "brand_name": brand_name,
+                    "product_id": product_id
                 },
                 dont_filter=True
             )

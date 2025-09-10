@@ -7,6 +7,25 @@ from scrapy.exceptions import CloseSpider
 class CoupangReviewsSpider(scrapy.Spider):
     name = 'coupang_reviews'
 
+    custom_settings = {
+        "PLAYWRIGHT_LAUNCH_OPTIONS": {
+            "headless": False,
+            "channel": "chrome",
+            "args": [
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+                "--disable-blink-features=AutomationControlled",
+            ],
+        },
+        "DOWNLOAD_HANDLERS": {
+            "http": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
+            "https": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
+        },
+        "PLAYWRIGHT_BROWSER_TYPE": "chromium"
+    }
+
     chrome_headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
         "Accept": "application/json, text/plain, */*",

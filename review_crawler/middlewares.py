@@ -145,7 +145,7 @@ class NaverSeleniumMiddleware:
             driver_info['is_initial_setup_done'] = True
 
         elif request.meta.get("click_next_page"):
-            page_to_click = request.meta.get("page_to_click")
+            page_to_click = request.meta.get("current_page")
             if not self._click_next_page(wait, page_to_click, spider, driver):
                 return HtmlResponse(
                     url=driver.current_url,
