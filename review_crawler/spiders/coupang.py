@@ -7,119 +7,116 @@ from scrapy.exceptions import CloseSpider
 class CoupangReviewsSpider(scrapy.Spider):
     name = 'coupang_reviews'
 
+    # --- KHÔNG CẦN custom_settings CỦA PLAYWRIGHT NỮA ---
+    # custom_settings = { ... }
     custom_settings = {
-        "PLAYWRIGHT_LAUNCH_OPTIONS": {
-            "headless": False,
-            "channel": "chrome",
-            "args": [
-                "--no-sandbox",
-                "--disable-setuid-sandbox",
-                "--disable-dev-shm-usage",
-                "--disable-gpu",
-                "--disable-blink-features=AutomationControlled",
-            ],
-        },
+        # --- BƯỚC 1: GHI ĐÈ DOWNLOAD HANDLER ---
+        # Ra lệnh cho spider NÀY và CHỈ spider này sử dụng scrapy-requests
         "DOWNLOAD_HANDLERS": {
-            "http": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
-            "https": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
+            "http": "review_crawler.handlers.RequestsDownloadHandler",
+            "https": "review_crawler.handlers.RequestsDownloadHandler",
         },
-        "PLAYWRIGHT_BROWSER_TYPE": "chromium"
+        
+        # --- BƯỚC 2: GHI ĐÈ NGƯỢC LẠI REACTOR ---
+        # Vì scrapy-requests hoạt động tốt nhất với reactor mặc định (asyncio),
+        # chúng ta sẽ ghi đè lại cài đặt "SelectReactor" an toàn trong settings.py.
+        # Đặt giá trị là None sẽ bảo Scrapy tự động chọn reactor tốt nhất.
+        # Hoặc chỉ định rõ ràng nếu bạn muốn:
+        "TWISTED_REACTOR": None,
     }
 
-    chrome_headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
-        "Accept": "application/json, text/plain, */*",
+    # --- SỬ DỤNG BỘ HEADERS ĐÃ ĐƯỢC CHỨNG MINH LÀ HOẠT ĐỘNG ---
+    # Đây là "chìa khóa vàng" của bạn
+    SUCCESSFUL_HEADERS = {
+        "Accept": "application/json",
+        "Accept-Encoding": "gzip, deflate, br, zstd",
         "Accept-Language": "en-US,en;q=0.9",
+        "Content-Type": "application/json",
+        "Pragma": "no-cache",
+        "Priority": "u=1, i",
         "Sec-Ch-Ua": '"Not;A=Brand";v="99", "Google Chrome";v="139", "Chromium";v="139"',
         "Sec-Ch-Ua-Mobile": "?0",
         "Sec-Ch-Ua-Platform": '"Windows"',
+        "Sec-Fetch-Dest": "empty",
+        "Sec-Fetch-Mode": "cors",
+        "Sec-Fetch-Site": "same-origin",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36"
     }
 
-    def __init__(self, product_id=None, *args, **kwargs):
+    def __init__(self, product_id=None, limit_reviews=100, *args, **kwargs):
         super(CoupangReviewsSpider, self).__init__(*args, **kwargs)
-
         if not product_id:
-            raise ValueError("Bạn phải cung cấp product_id bằng cờ -a. Ví dụ: -a product_id=123456")
+            raise ValueError("Vui lòng cung cấp product_id.")
         
-        self.product_id = product_id
-        self.base_api_url = f'https://www.coupang.com/next-api/review?productId={self.product_id}&page={{page_num}}&size=10&sortBy=DATE_DESC'
-        self.chrome_headers['Referer'] = f'https://www.coupang.com/vp/products/{self.product_id}'
-        self.total_reviews = 0
-        self.limit_reviews = 50
+        self.product_id = str(product_id)
+        self.base_api_url = f'https://www.coupang.com/next-api/review?productId={self.product_id}&page={{page_num}}&size=20&sortBy=DATE_DESC'
+        self.limit_reviews = int(limit_reviews)
 
     def start_requests(self):
         first_page_url = self.base_api_url.format(page_num=1)
         
+        headers = self.SUCCESSFUL_HEADERS.copy()
+        headers['Referer'] = f'https://www.coupang.com/vp/products/{self.product_id}'
+        
         yield scrapy.Request(
             url=first_page_url,
-            headers=self.chrome_headers,
+            headers=headers,
             callback=self.parse,
             meta={
-                'playwright': True,
-                'current_page': 1
+                'page': 1,
+                'collected_reviews_count': 0
             }
         )
 
     def parse(self, response):
-        current_page = response.meta['current_page']
+        # Lấy trạng thái từ meta
+        current_page = response.meta['page']
+        collected_reviews_count = response.meta['collected_reviews_count']
+        
         self.log(f'Đang xử lý trang số: {current_page}')
 
         try:
-            json_string = response.css('pre::text').get()
-
-            if not json_string:
-                self.log(f"Lỗi: Không tìm thấy thẻ <pre> chứa JSON trên trang {current_page}.")
-                self.log(f"Nội dung response: {response.text[:500]}") # In ra một đoạn để debug
-                return
-
-            data = json.loads(json_string)
-
+            data = response.json()
         except json.JSONDecodeError:
-            self.log(f'Lỗi: Nội dung bên trong thẻ <pre> không phải là JSON hợp lệ trên trang {current_page}.')
+            self.log(f'Lỗi: Response không phải là JSON hợp lệ trên trang {current_page}.')
+            self.log(f"Nội dung response: {response.text[:500]}")
             return
         
         reviews = data.get('rData', {}).get('paging', {}).get('contents', [])
-
-        if not reviews:
-            self.log(f'Không tìm thấy review nào trên trang {current_page}.')
+        if not reviews and current_page > 1:
+            self.log(f'Không tìm thấy review nào trên trang {current_page}. Dừng lại.')
             return
 
         for review in reviews:
-
-            if self.total_reviews >= self.limit_reviews:
-                raise CloseSpider('Đã đạt đến giới hạn số review cần crawl.')
+            if collected_reviews_count >= self.limit_reviews:
+                self.log(f"Đã đạt giới hạn {self.limit_reviews} reviews. Dừng lại.")
+                return
 
             review_timestamp_ms = review.get('reviewAt')
-            review_date = None
-            if review_timestamp_ms:
-                review_date = datetime.fromtimestamp(review_timestamp_ms / 1000).strftime('%Y.%m.%d')
+            review_date = datetime.fromtimestamp(review_timestamp_ms / 1000).strftime('%Y.%m.%d') if review_timestamp_ms else None
 
             review_item = ReviewItem()
             review_item['date'] = review_date
             review_item['rating'] = review.get('rating')
             review_item['item_name'] = review.get('itemName')
-
-            yield review_item
-            self.total_reviews += 1
-
-        paging_info = data.get('rData', {}).get('paging', {})
-        total_page = paging_info.get('totalPage')
-        current_page = response.meta['current_page']
-
-        if self.total_reviews < self.limit_reviews:
-            next_page = current_page + 1
-            self.log(f'Đang chuẩn bị crawl trang tiếp theo: {next_page}')
             
+            yield review_item
+            collected_reviews_count += 1
+
+        # Logic phân trang
+        if collected_reviews_count < self.limit_reviews:
+            next_page = current_page + 1
             next_page_url = self.base_api_url.format(page_num=next_page)
+            
+            headers = self.SUCCESSFUL_HEADERS.copy()
+            headers['Referer'] = f'https://www.coupang.com/vp/products/{self.product_id}'
             
             yield scrapy.Request(
                 url=next_page_url,
-                headers=self.chrome_headers,
+                headers=headers,
                 callback=self.parse,
                 meta={
-                    'playwright': True,
-                    'current_page': next_page
+                    'page': next_page,
+                    'collected_reviews_count': collected_reviews_count
                 }
             )
-        else:
-            self.log('Đã crawl đến trang cuối cùng theo dữ liệu từ API.')

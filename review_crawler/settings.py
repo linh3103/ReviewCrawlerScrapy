@@ -91,6 +91,9 @@ TWISTED_REACTOR = "twisted.internet.selectreactor.SelectReactor"
 FEED_EXPORT_ENCODING = "utf-8"
 
 ITEM_PIPELINES = {
+    'review_crawler.pipelines.ScrapydSchedulerPipeline': 200,
     'review_crawler.pipelines.ProcessReviewOptionPipeline': 300,
     'review_crawler.pipelines.ExcelExportPipeline': 400,
 }
+
+SCRAPYD_URL = "http://localhost:6800"

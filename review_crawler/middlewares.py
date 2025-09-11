@@ -1,26 +1,20 @@
-# Define here the models for your spider middleware
-#
-# See documentation in:
-# https://docs.scrapy.org/en/latest/topics/spider-middleware.html
-
-from scrapy import signals
-
-# useful for handling different item types with a single interface
-from itemadapter import ItemAdapter
-
-from scrapy.http import HtmlResponse
 import time
 from weakref import WeakKeyDictionary
+from scrapy import signals
+from scrapy.http import HtmlResponse
 
-# ===== imports used for naver spider ===============================================
-import undetected_chromedriver as uc
-from selenium.webdriver.chrome.options import Options
+# --- THAY ĐỔI QUAN TRỌNG VỀ IMPORT ---
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+# không cần uc nữa
+
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from review_crawler.helpers.ChromeVerHelper import get_chrome_major_version
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
-# ===== imports used for naver spider ===============================================
+
+import shutil
+import os
 
 class ReviewCrawlerSpiderMiddleware:
     # Not all methods need to be defined. If a method is not defined,
@@ -155,7 +149,16 @@ class NaverSeleniumMiddleware:
                 )
 
         REVIEW_LIST_SELECTOR = "div#REVIEW li[data-shp-area='revlist.review']"
-        wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, REVIEW_LIST_SELECTOR)))
+        
+        try:
+            wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, REVIEW_LIST_SELECTOR)))
+        except (TimeoutException, NoSuchElementException):
+            return HtmlResponse(
+            url=driver.current_url,
+            body=b"",
+            encoding="utf-8",
+            request=request
+        )
         
         # Sử dụng JavaScript để lấy tất cả outerHTML một lần
         body = driver.execute_script("""
@@ -186,51 +189,102 @@ class NaverSeleniumMiddleware:
 
         recent_button = wait.until(EC.element_to_be_clickable((By.XPATH, "//a[contains(text(), '최신순')]")))
         driver.execute_script("arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });", recent_button)
-        recent_button.click()
         time.sleep(1)
-
-        PAGINATION_SELECTOR = "div[data-shp-area='revlist.pgn']"
-        pagination_element = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, PAGINATION_SELECTOR)))
-        driver.execute_script("arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });", pagination_element)
+        recent_button.click()
         time.sleep(1)
 
     def _click_next_page(self, wait, page, spider, driver):
         NEXT_PAGE_SELECTOR = f"div#REVIEW div[data-shp-area-id='pgn'] a[data-shp-contents-id='{page}']"
         try:
             next_page_element = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, NEXT_PAGE_SELECTOR)))
+            driver.execute_script("arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });", next_page_element)
+            time.sleep(1)
             next_page_element.click()
             time.sleep(1)
             return True
         except (NoSuchElementException, TimeoutException):
             return False
 
-    def _get_chrome_options(self):
-        chrome_options = uc.ChromeOptions()
+    def _get_chrome_options(self, spider):
+        chrome_options = webdriver.ChromeOptions()
+        
+        # Các tùy chọn chống phát hiện cơ bản
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-gpu")
+        chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        chrome_options.add_experimental_option('useAutomationExtension', False)
+        
+        # Các tùy chọn hiệu năng
         chrome_options.add_argument(f'--lang=ko-KR')
         chrome_options.add_argument("--blink-settings=imagesEnabled=false")
-        chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+        chrome_options.add_argument("--window-size=800,600")
 
+        # Đọc và sử dụng hồ sơ người dùng riêng biệt
+        user_data_dir = spider.settings.get('SELENIUM_USER_DATA_DIR')
+        if user_data_dir:
+            spider.logger.info(f"Using custom user data directory: {user_data_dir}")
+            chrome_options.add_argument(f'--user-data-dir={user_data_dir}')
+            
         return chrome_options
 
     def spider_opened(self, spider):
-        # Hàm này được gọi MỘT LẦN cho MỖI SPIDER khi nó bắt đầu.
-        # Chỉ hành động nếu spider cần Selenium.
         if "use_selenium" in getattr(spider, "middleware_flags", []):
             spider.logger.info(f"Spider {spider.name} requires Selenium. Opening a new browser.")
+                  
+            driver = self._create_driver(spider)
             
-            # Khởi tạo driver và LƯU NÓ VÀO DICTIONARY với key là spider object
-            chrome_options = self._get_chrome_options()
-            driver = uc.Chrome(options=chrome_options)
-            self.drivers[spider] = {
-                'driver': driver,
-                'is_initial_setup_done': False # Mỗi spider có cờ trạng thái riêng
-            }
+            if driver:
+                self.drivers[spider] = {
+                    'driver': driver,
+                    'is_initial_setup_done': False
+                }
+
+    def _create_driver(self, spider):
+        """Hàm tạo driver selenium tiêu chuẩn với cấu hình song song."""
+        try:
+            chrome_options = self._get_chrome_options(spider)
+            
+            # --- ĐÂY LÀ CHÌA KHÓA ĐỂ CHẠY SONG SONG ---
+            # Tạo một Service object. port=0 bảo hệ điều hành tự tìm một port còn trống.
+            # Mỗi trình duyệt sẽ có một "đường dây" riêng.
+            service = Service(port=0) 
+            
+            # Khởi tạo driver bằng selenium tiêu chuẩn
+            driver = webdriver.Chrome(service=service, options=chrome_options)
+            return driver
+        except Exception as e:
+            spider.logger.error(f"Failed to create standard selenium driver: {e}")
+            return None
 
     def spider_closed(self, spider):
         # Hàm này được gọi MỘT LẦN cho MỖI SPIDER khi nó kết thúc.
         if spider in self.drivers:
-            spider.logger.info(f"Spider {spider.name} closed. Shutting down its browser.")
+            spider.logger.info(f"Spider {spider.name} with product ID {spider.product_id} closed. Shutting down its browser.")
+            
+            # Lấy thông tin driver và đường dẫn hồ sơ
             driver_info = self.drivers.pop(spider)
-            driver_info['driver'].quit()
+            driver = driver_info['driver']
+            user_data_dir = spider.settings.get('SELENIUM_USER_DATA_DIR')
+
+            # --- BƯỚC 1: ĐÓNG TRÌNH DUYỆT TRƯỚC TIÊN ---
+            # Điều này rất quan trọng để giải phóng file khóa trong thư mục hồ sơ.
+            try:
+                driver.quit()
+                spider.logger.info(f"Browser for product {spider.product_id} has been closed.")
+            except Exception as e:
+                spider.logger.warning(f"Could not quit the driver for product {spider.product_id}: {e}")
+
+            # --- BƯỚC 2: DỌN DẸP THƯ MỤC HỒ SƠ ---
+            # Kiểm tra xem đường dẫn có tồn tại không trước khi xóa
+            if user_data_dir and os.path.exists(user_data_dir):
+                spider.logger.info(f"Cleaning up user data directory: {user_data_dir}")
+                try:
+                    # shutil.rmtree sẽ xóa toàn bộ thư mục và nội dung bên trong
+                    shutil.rmtree(user_data_dir)
+                    spider.logger.info(f"Successfully cleaned up directory for product {spider.product_id}.")
+                except Exception as e:
+                    # Bắt lỗi nếu không xóa được (ví dụ: do quyền truy cập)
+                    spider.logger.error(f"Failed to clean up user data directory {user_data_dir}: {e}")
+            else:
+                spider.logger.warning(f"User data directory not found or not specified, skipping cleanup for product {spider.product_id}.")

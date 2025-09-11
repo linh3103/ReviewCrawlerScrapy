@@ -7,7 +7,6 @@ class NaverSeleniumSpider(scrapy.Spider):
     name = 'naver_reviews'
     middleware_flags = ["use_selenium"]
 
-
     NAVER_STORES = {
         "바자르": "https://brand.naver.com/bazaar/products/",
         "라뽐므": "https://brand.naver.com/lapomme/products/",
@@ -43,45 +42,35 @@ class NaverSeleniumSpider(scrapy.Spider):
         }
     }
 
-    def __init__(self, brands_products=None, *args, **kwargs):
+    def __init__(self, brand_name=None, product_id=None, *args, **kwargs):
         super(NaverSeleniumSpider, self).__init__(*args, **kwargs)
-        # if not brands_products:
-        #     raise ValueError("Vui lòng cung cấp product_id...")
+        if not brand_name and product_id:
+            raise ValueError("Vui lòng cung cấp brand và mã sản phẩm...")
         
-        json_str = '{"아토앤알로": [226613999,2007829417]}'
-        self.brands_products = json.loads(json_str)
+        self.brand_name = brand_name
+        self.product_id = product_id
         self.limit_reviews = 100
     
     def start_requests(self):
-        for brand_name, product_ids in self.brands_products.items():
-            brand_url = self.NAVER_STORES.get(brand_name)
-            if not brand_url:
-                continue
+        brand_url = self.NAVER_STORES.get(self.brand_name)
+        target_url = f"{brand_url}{self.product_id}"
 
-            for product_id in product_ids:
-                self.product_id = product_id
-                target_url = f"{brand_url}{product_id}"
-
-                yield scrapy.Request(
-                    url=target_url,
-                    callback=self.parse,
-                    meta={
-                        "use_selenium": True,
-                        "current_page": 1,
-                        "collected_reviews_count": 0,
-                        "brand_name": brand_name,
-                        "product_id": product_id
-                    }
-                )
-        
+        yield scrapy.Request(
+            url=target_url,
+            callback=self.parse,
+            meta={
+                "use_selenium": True,
+                "current_page": 1,
+                "collected_reviews_count": 0,
+            }
+        )
+                
     def parse(self, response):
         REVIEW_LIST_SELECTOR = "li[data-shp-area='revlist.review']"
         reviews_in_page = response.css(REVIEW_LIST_SELECTOR)
 
         collected_reviews_count = response.meta.get("collected_reviews_count")
         current_page = response.meta.get("current_page")
-        brand_name = response.meta.get("brand_name")
-        product_id = response.meta.get("product_id")
 
         if not reviews_in_page:
             self.logger.info("No more reviews found. Stopping pagination.")
@@ -110,9 +99,9 @@ class NaverSeleniumSpider(scrapy.Spider):
             collected_reviews_count += 1
 
             if collected_reviews_count >= self.limit_reviews:
-                break
+                return
 
-        if  collected_reviews_count < self.limit_reviews:
+        if collected_reviews_count < self.limit_reviews:
             next_page = current_page + 1
             yield scrapy.Request(
                 url=response.request.url,
@@ -121,9 +110,7 @@ class NaverSeleniumSpider(scrapy.Spider):
                     "use_selenium":True,
                     "click_next_page": True,
                     "current_page": next_page,
-                    "collected_reviews_count": collected_reviews_count,
-                    "brand_name": brand_name,
-                    "product_id": product_id
+                    "collected_reviews_count": collected_reviews_count
                 },
                 dont_filter=True
             )
