@@ -10,10 +10,11 @@ class ProductListSpider(scrapy.Spider):
     def __init__(self, *args, **kwargs):
         super(ProductListSpider, self).__init__(*args, **kwargs)
 
-        with open("brands_products.json", "r", encoding="utf-8") as f:
-            data = json.load(f)
-
-        self.brands_products = data
+        self.brands_products = {
+            "Ohou.se": [11246,345755],
+            "Coupang": [6287221036,6674000351],
+            "도아드림": [6099802980,8279484987]
+        }
 
     def start_requests(self):
         self.logger.info("Dispatcher spider is starting...")
@@ -23,7 +24,6 @@ class ProductListSpider(scrapy.Spider):
 
     def parse(self, response):
         for brand_name, product_ids in self.brands_products.items():
-
             spider_name = self.get_spider_name_by_brand_name(brand_name)
             for product_id in product_ids:
                 yield {

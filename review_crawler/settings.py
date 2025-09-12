@@ -27,7 +27,7 @@ AUTOTHROTTLE_ENABLED = False
 # AUTOTHROTTLE_MAX_DELAY = 10
 # AUTOTHROTTLE_TARGET_CONCURRENCY = 5.0
 
-CONCURRENT_REQUESTS = 5
+CONCURRENT_REQUESTS = 2
 # CONCURRENT_REQUESTS_PER_DOMAIN = 8
 # DOWNLOAD_DELAY = 1
 
@@ -91,9 +91,9 @@ TWISTED_REACTOR = "twisted.internet.selectreactor.SelectReactor"
 FEED_EXPORT_ENCODING = "utf-8"
 
 ITEM_PIPELINES = {
-    'review_crawler.pipelines.ScrapydSchedulerPipeline': 200,
-    'review_crawler.pipelines.ProcessReviewOptionPipeline': 300,
-    'review_crawler.pipelines.ExcelExportPipeline': 400,
+    'review_crawler.pipelines.schedule_pipeline.ScrapydSchedulerPipeline': 200,
+    'review_crawler.pipelines.item_pipeline.ProcessReviewOptionPipeline': 300,
+    'review_crawler.pipelines.excel_pipeline.ExcelExportPipeline': 400,
 }
 
 SCRAPYD_URL = "http://localhost:6800"

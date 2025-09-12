@@ -26,7 +26,7 @@ class OhouseSpider(scrapy.Spider):
         if product_id:
 
             self.total_reviews = 0
-            self.limit_reviews = 300
+            self.limit_reviews = 100
 
             self.product_id = product_id
             self.base_url = f"https://ohou.se/production_reviews.json?production_id={self.product_id}&page={{page}}&order=recent"

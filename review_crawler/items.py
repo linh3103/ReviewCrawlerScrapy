@@ -5,7 +5,6 @@
 
 import scrapy
 
-
 class ReviewItem(scrapy.Item):
     date = scrapy.Field()
     rating = scrapy.Field()
