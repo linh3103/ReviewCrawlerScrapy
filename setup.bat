@@ -1,7 +1,7 @@
 @echo off
 CLS
 ECHO ====================================================================
-ECHO      AUTOMATED SETUP & RUN SCRIPT FOR REVIEW CRAWLER (WINDOWS)
+ECHO      AUTOMATED SETUP ^& RUN SCRIPT FOR REVIEW CRAWLER (WINDOWS)
 ECHO ====================================================================
 ECHO This script will set up the environment, start servers, and run the app.
 ECHO It prioritizes Conda if available, otherwise it will use venv.
@@ -10,7 +10,7 @@ ECHO.
 
 REM --- Bước 1: Quyết định sử dụng Conda hay venv ---
 ECHO [?] Checking for Conda installation...
-conda --version >nul 2>nul
+CALL conda --version >nul 2>nul
 IF %errorlevel% equ 0 (
     ECHO [i] Conda found! Proceeding with Conda setup.
     GOTO USE_CONDA
@@ -26,24 +26,30 @@ SET ENV_NAME=review_crawler_env
 ECHO.
 ECHO --- Conda Setup ---
 ECHO [?] Checking if Conda environment '%ENV_NAME%' exists...
-conda env list | findstr /B "%ENV_NAME% " >nul
+CALL conda env list | findstr /B "%ENV_NAME% " >nul
 IF %errorlevel% neq 0 (
     ECHO [+] Conda environment '%ENV_NAME%' not found. Creating it now...
-    conda create --name %ENV_NAME% python=3.10 -y
+    
+    REM === THAY ĐỔI 1: YÊU CẦU CÀI ĐẶT PIP NGAY KHI TẠO MÔI TRƯỜNG ===
+    CALL conda create --name %ENV_NAME% python=3.10 pip -y
+    
     IF %errorlevel% neq 0 ( ECHO !!! ERROR: Failed to create Conda environment. & GOTO FAILED )
 ) ELSE (
     ECHO [i] Conda environment '%ENV_NAME%' already exists.
 )
 
 ECHO [+] Installing/updating packages in '%ENV_NAME%'...
-conda run -n %ENV_NAME% pip install -r requirements.txt
+
+REM === THAY ĐỔI 2: SỬ DỤNG 'python -m pip' ĐỂ ĐẢM BẢO AN TOÀN TUYỆT ĐỐI ===
+CALL conda run -n %ENV_NAME% python -m pip install -r requirements.txt
+
 IF %errorlevel% neq 0 ( ECHO !!! ERROR: Failed to install packages using Conda. & GOTO FAILED )
 
-REM --- BƯỚC MỚI: START SCRAPYD VÀ DEPLOY ---
+REM --- START SCRAPYD VÀ DEPLOY ---
 CALL :START_AND_DEPLOY_LOGIC "conda run -n %ENV_NAME%"
 
 ECHO [+] Starting the Flask UI application...
-conda run -n %ENV_NAME% python ui/app.py
+CALL conda run -n %ENV_NAME% python UI/app.py
 GOTO END
 
 
@@ -51,12 +57,12 @@ GOTO END
 REM ===================== LOGIC CHO VENV =====================
 ECHO.
 ECHO --- Venv Setup ---
-python --version >nul 2>nul
+CALL python --version >nul 2>nul
 if %errorlevel% neq 0 ( ECHO !!! ERROR: Python is not found. & GOTO FAILED )
 
 IF NOT EXIST venv (
     ECHO [+] Creating virtual environment 'venv'...
-    python -m venv venv
+    CALL python -m venv venv
     IF %errorlevel% neq 0 ( ECHO !!! ERROR: Failed to create virtual environment. & GOTO FAILED )
 ) ELSE (
     ECHO [i] Virtual environment 'venv' already exists.
@@ -64,14 +70,14 @@ IF NOT EXIST venv (
 
 ECHO [+] Activating venv and installing packages...
 CALL venv\Scripts\activate
-pip install -r requirements.txt
+CALL python -m pip install -r requirements.txt
 IF %errorlevel% neq 0 ( ECHO !!! ERROR: Failed to install packages using venv. & GOTO FAILED )
 
-REM --- BƯỚC MỚI: START SCRAPYD VÀ DEPLOY ---
+REM --- START SCRAPYD VÀ DEPLOY ---
 CALL :START_AND_DEPLOY_LOGIC ""
 
 ECHO [+] Starting the Flask UI application...
-python ui/app.py
+CALL python UI/app.py
 GOTO END
 
 
@@ -82,21 +88,17 @@ SET "RUN_PREFIX=%~1"
 ECHO.
 ECHO --- Starting Servers and Deploying Project ---
 ECHO [+] Starting Scrapyd server in a new window...
-REM Lệnh START sẽ mở một cửa sổ command mới và chạy lệnh, cho phép script này tiếp tục
 START "Scrapyd Server" %RUN_PREFIX% scrapyd
 
 ECHO [i] Waiting 5 seconds for Scrapyd server to initialize...
-REM Chờ một chút để server có thời gian khởi động
 timeout /t 5 /nobreak >nul
 
-REM Deploy dự án, nhưng chỉ khi chưa deploy lần nào
 IF NOT EXIST crawler\.deployed (
     ECHO [+] Project has not been deployed. Deploying 'crawler' project now...
     cd crawler
-    %RUN_PREFIX% scrapyd-deploy
+    CALL %RUN_PREFIX% scrapyd-deploy
     IF %errorlevel% equ 0 (
         ECHO [i] Deployment successful. Creating a flag file to skip this step next time.
-        REM Tạo một file trống để đánh dấu đã deploy
         ECHO deployed > .deployed
     ) ELSE (
         ECHO !!! WARNING: Deployment failed. The crawler might not be available in Scrapyd.
@@ -113,6 +115,7 @@ EXIT /B 0
 ECHO.
 ECHO !!! Setup failed. Please check the error messages above.
 GOTO END
+
 
 :END
 ECHO.
