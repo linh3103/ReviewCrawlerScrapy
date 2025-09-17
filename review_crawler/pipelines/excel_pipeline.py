@@ -2,6 +2,7 @@ from dateutil.relativedelta import relativedelta
 from wcwidth import wcswidth
 import pandas as pd
 import os
+from review_crawler.enums import SpiderName
 
 class ExcelExportPipeline:
     def __init__(self):
@@ -30,8 +31,8 @@ class ExcelExportPipeline:
         # Chuyển set thành list để có thể sắp xếp
         sorted_option_keys = list(option_keys)
 
-        # YÊU CẦU 2: Nếu spider là coupang_reviews, sắp xếp các cột option
-        if spider.name == 'coupang_reviews':
+        # YÊU CẦU 2: Nếu spider là Coupang_Spider, sắp xếp các cột option
+        if spider.name == 'Coupang_Spider':
             # Hàm key để trích xuất số từ 'option_1', 'option_2',...
             # Điều này đảm bảo 'option_10' đứng sau 'option_9'
             def sort_key(key):
@@ -75,14 +76,25 @@ class ExcelExportPipeline:
         df["Rating"] = pd.to_numeric(df['Rating'], errors='coerce')
 
         desktop = os.path.join(os.path.expanduser("~"), "Desktop")
-        base_dir = os.path.join(desktop, "Product ratings", spider.name)
+
+        report_folder_name = spider.report_folder_name
+
+        base_dir = os.path.join(desktop, "Product ratings", report_folder_name)
         os.makedirs(base_dir, exist_ok=True)
         
         # Lấy product_id từ spider nếu có
         product_id = getattr(spider, 'product_id', 'unknown_product')
-        fileName = os.path.join(base_dir, f"{spider.name}_code_{product_id}.xlsx")
+
+        # Tạo file path
+        file_path = os.path.join(base_dir, f"{report_folder_name}_code_{product_id}.xlsx")
+
+        # Tạo các thư mục brand của Naver
+        if spider.name == SpiderName.NAVER_SPIDER.value:
+            brand_dir = os.path.join(base_dir, spider.brand_name)
+            os.makedirs(brand_dir, exist_ok=True)
+            file_path = os.path.join(brand_dir, f"{report_folder_name}_{spider.brand_name}_code_{product_id}.xlsx")
         
-        self.ProcessExcel(df, fileName)
+        self.ProcessExcel(df, file_path)
 
     def ProcessExcel(self, df: pd.DataFrame, file_name: str):
         pivot = {}

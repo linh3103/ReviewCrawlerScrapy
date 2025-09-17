@@ -1,13 +1,13 @@
 import requests
 import os
 import scrapy
+from review_crawler.enums import SpiderName
 
 class ScrapydSchedulerPipeline:
     def process_item(self, item, spider):
         # `spider` ở đây là một đối tượng Spider hợp lệ.
         # `item` là dict mà spider đã yield.
         if item.get('action') == 'schedule_job':
-            # Gọi hàm schedule_job nhưng không dùng `self.`
             self.schedule_job(item, spider) 
             raise scrapy.exceptions.DropItem(f"Scheduled job for {item.get('product_id')}")
         
@@ -26,18 +26,18 @@ class ScrapydSchedulerPipeline:
         scrapyd_url = spider.settings.get('SCRAPYD_URL', 'http://localhost:6800')
         
         pid = job_data.get('product_id')
+        spider_name = job_data.get('spider_name')
 
         profile_path = os.path.abspath(os.path.join('profiles', f'user_{pid}'))
         
         payload = {
             'project': job_data.get('project_name'),
-            'spider': job_data.get('spider_name'),
+            'spider': spider_name,
             'product_id': pid
         }
 
-        spider_name = job_data.get('spider_name')
         brand_name = job_data.get('brand_name')
-        if spider_name == 'naver_reviews':
+        if spider_name == SpiderName.NAVER_SPIDER.value and brand_name:
             payload['brand_name'] = brand_name
             payload['setting'] = f'SELENIUM_USER_DATA_DIR={profile_path}'
 

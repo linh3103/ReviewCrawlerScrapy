@@ -1,15 +1,16 @@
 from review_crawler.items import ReviewWithOptionItem
 from review_crawler.helpers.DateHelper import format_date_str
+from review_crawler.enums import SpiderName
 
 class ProcessReviewOptionPipeline:
     def process_item(self, item, spider):
-        if spider.name == 'coupang_reviews':
+        if spider.name == SpiderName.COUPANG_SPIDER.value:
             return self.process_coupang_item(item)
         
-        elif spider.name == 'ohouse_reviews':
+        elif spider.name == SpiderName.OHOUSE_SPIDER.value:
             return self.process_ohouse_item(item)
         
-        elif spider.name == 'naver_reviews':
+        elif spider.name == SpiderName.NAVER_SPIDER.value:
             return self.process_naver_item(item)
         
         return item

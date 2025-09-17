@@ -2,33 +2,21 @@ import scrapy
 import json
 from datetime import datetime
 from review_crawler.items import ReviewItem
-from scrapy.exceptions import CloseSpider
+from review_crawler.enums import SpiderName
 
 class CoupangReviewsSpider(scrapy.Spider):
-    name = 'coupang_reviews'
+    name = SpiderName.COUPANG_SPIDER.value
 
-    # --- KHÔNG CẦN custom_settings CỦA PLAYWRIGHT NỮA ---
-    # custom_settings = { ... }
     custom_settings = {
-        # --- BƯỚC 1: GHI ĐÈ DOWNLOAD HANDLER ---
-        # Ra lệnh cho spider NÀY và CHỈ spider này sử dụng scrapy-requests
         "DOWNLOAD_HANDLERS": {
             "http": "review_crawler.handlers.RequestsDownloadHandler",
             "https": "review_crawler.handlers.RequestsDownloadHandler",
         },
-        
-        # --- BƯỚC 2: GHI ĐÈ NGƯỢC LẠI REACTOR ---
-        # Vì scrapy-requests hoạt động tốt nhất với reactor mặc định (asyncio),
-        # chúng ta sẽ ghi đè lại cài đặt "SelectReactor" an toàn trong settings.py.
-        # Đặt giá trị là None sẽ bảo Scrapy tự động chọn reactor tốt nhất.
-        # Hoặc chỉ định rõ ràng nếu bạn muốn:
         "TWISTED_REACTOR": None,
     }
 
-    # --- SỬ DỤNG BỘ HEADERS ĐÃ ĐƯỢC CHỨNG MINH LÀ HOẠT ĐỘNG ---
-    # Đây là "chìa khóa vàng" của bạn
     SUCCESSFUL_HEADERS = {
-        "Accept": "application/json",
+        "Accept": "application/json, text/plain, */*",
         "Accept-Encoding": "gzip, deflate, br, zstd",
         "Accept-Language": "en-US,en;q=0.9",
         "Content-Type": "application/json",
@@ -51,6 +39,7 @@ class CoupangReviewsSpider(scrapy.Spider):
         self.product_id = str(product_id)
         self.base_api_url = f'https://www.coupang.com/next-api/review?productId={self.product_id}&page={{page_num}}&size=20&sortBy=DATE_DESC'
         self.limit_reviews = int(limit_reviews)
+        self.report_folder_name = "Coupang"
 
     def start_requests(self):
         first_page_url = self.base_api_url.format(page_num=1)

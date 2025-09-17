@@ -1,9 +1,10 @@
 import scrapy
 from review_crawler.items import OhouseReviewItem
 from scrapy.exceptions import CloseSpider
+from review_crawler.enums.spider_enum import SpiderName
 
 class OhouseSpider(scrapy.Spider):
-    name = "ohouse_reviews"
+    name = SpiderName.OHOUSE_SPIDER.value
 
     chrome_headers = {
         "Accept": "application/json",
@@ -31,6 +32,7 @@ class OhouseSpider(scrapy.Spider):
             self.product_id = product_id
             self.base_url = f"https://ohou.se/production_reviews.json?production_id={self.product_id}&page={{page}}&order=recent"
             self.chrome_headers['Referer'] = f"https://ohou.se/productions/{self.product_id}/selling?affect_id=1&affect_type=StoreSearchResult"
+            self.report_folder_name = "Ohouse"
 
         else:
             raise ValueError("Please provide product_id using -a flag, e.g., -a product_id=123456")

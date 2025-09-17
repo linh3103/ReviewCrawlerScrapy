@@ -2,39 +2,13 @@
 import json
 import scrapy
 from review_crawler.items import ReviewItem
+from review_crawler.enums.spider_enum import SpiderName
+from review_crawler.utils.constants import NAVER_STORES
 
 class NaverSeleniumSpider(scrapy.Spider):
-    name = 'naver_reviews'
-    middleware_flags = ["use_selenium"]
+    name = SpiderName.NAVER_SPIDER.value
 
-    NAVER_STORES = {
-        "바자르": "https://brand.naver.com/bazaar/products/",
-        "라뽐므": "https://brand.naver.com/lapomme/products/",
-        "쁘리엘르": "https://brand.naver.com/prielle/products/",
-        "마틸라": "https://brand.naver.com/maatila/products/",
-        "그래이불": "https://brand.naver.com/yesbedding/products/",
-        "믹스앤매치": "https://brand.naver.com/mixandmatch/products/",
-        "누비지오": "https://brand.naver.com/nubizio/products/",
-        "데코뷰": "https://brand.naver.com/decoview/products/",
-        "깃든": "https://brand.naver.com/gitden/products/",
-        "스타일링홈": "https://brand.naver.com/styhome/products/",
-        "아망떼": "https://brand.naver.com/amante/products/",
-        "호무로": "https://brand.naver.com/homuro/products/",
-        "헬로우슬립": "https://brand.naver.com/hellosleep/products/",
-        "오넬로이": "https://smartstore.naver.com/oneloi/products/",
-        "플로라": "https://brand.naver.com/flora/products/",
-        "르올": "https://smartstore.naver.com/mewansungmall/products/",
-        "에이트룸": "https://brand.naver.com/8room/products/",
-        "베이직톤": "https://brand.naver.com/basictone/products/",
-        "아토앤알로": "https://brand.naver.com/beddingnara/products/",
-        "바숨": "https://brand.naver.com/busum/products/",
-        "올리비아데코": "https://brand.naver.com/oliviadeco/products/",
-        "코지네스트": "https://brand.naver.com/cozynest/products/",
-        "메종오트몬드": "https://smartstore.naver.com/hautemonde/products/",
-        "바운티풀": "https://brand.naver.com/bountiful/products/",
-        "도아드림": "https://brand.naver.com/doadream_goose/products/",
-        "CROWN GOOSE": "https://brand.naver.com/crowngoose/products/"
-    }
+    middleware_flags = ["use_selenium"]
 
     custom_settings = {
         "DOWNLOADER_MIDDLEWARES": {
@@ -50,9 +24,10 @@ class NaverSeleniumSpider(scrapy.Spider):
         self.brand_name = brand_name
         self.product_id = product_id
         self.limit_reviews = 100
+        self.report_folder_name = "Naver"
     
     def start_requests(self):
-        brand_url = self.NAVER_STORES.get(self.brand_name)
+        brand_url = NAVER_STORES.get(self.brand_name)
         target_url = f"{brand_url}{self.product_id}"
 
         yield scrapy.Request(

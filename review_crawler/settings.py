@@ -89,6 +89,7 @@ TWISTED_REACTOR = "twisted.internet.selectreactor.SelectReactor"
 
 # Set settings whose default value is deprecated to a future-proof value
 FEED_EXPORT_ENCODING = "utf-8"
+LOG_ENCODING = 'utf-8'
 
 ITEM_PIPELINES = {
     'review_crawler.pipelines.schedule_pipeline.ScrapydSchedulerPipeline': 200,

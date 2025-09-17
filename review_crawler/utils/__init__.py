@@ -1,0 +1,1 @@
+from review_crawler.utils.constants import NAVER_STORES
