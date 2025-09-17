@@ -35,6 +35,7 @@ class ProductListSpider(scrapy.Spider):
             
             # Mở Google Sheet bằng tên của nó
             # Thay 'Tên Sheet Của Bạn' bằng tên thật của sheet
+            self.logger.debug(f"Google sheet: {self.sheet_url}")
             sheet = client.open_by_url(self.sheet_url).sheet1
             
             # Lấy tất cả dữ liệu từ sheet dưới dạng danh sách các dictionary
