@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Scrapy Runner - FastAPI</title>
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container mt-5">
+        <div class="row justify-content-center">
+            <div class="col-md-7">
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Run Spider from Google Sheet</h3>
+                    </div>
+                    <div class="card-body">
+                        <!-- Lựa chọn phương thức nhập liệu -->
+                        <div class="mb-4">
+                            <label class="form-label fw-bold">Input Method</label>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="inputType" id="inputManual" value="manual" checked>
+                                <label class="form-check-label" for="inputManual">Manual URL Input</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="inputType" id="inputDrive" value="drive">
+                                <label class="form-check-label" for="inputDrive">Select from Google Drive</label>
+                            </div>
+                        </div>
+
+                        <!-- === Khối Nhập Thủ Công (hiển thị mặc định) === -->
+                        <div id="manualControls">
+                            <div class="mb-3">
+                                <label for="sheetUrlInput" class="form-label">Google Sheet URL</label>
+                                <input type="text" id="sheetUrlInput" class="form-control" placeholder="Paste the full Google Sheet URL here">
+                            </div>
+                        </div>
+
+                        <!-- === Khối Chọn từ Drive (ẩn mặc định) === -->
+                        <div id="driveControls" style="display: none;">
+                            <div class="d-grid gap-2">
+                                <button id="loadDriveFilesBtn" class="btn btn-secondary mb-2" type="button">
+                                    Load Files from Drive
+                                </button>
+                            </div>
+                            <div class="mb-3">
+                                <label for="driveFileSelect" class="form-label">Select a File</label>
+                                <select id="driveFileSelect" class="form-select" disabled>
+                                    <option selected>-- Click button above to load files --</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Nút Chạy chung -->
+                        <hr>
+                        <button id="runButton" type="button" class="btn btn-primary w-100 mt-3">Run Spider</button>
+                        
+                        <!-- Khu vực hiển thị kết quả -->
+                        <div id="result" class="mt-4"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Lấy các Element từ DOM ---
+        const manualRadio = document.getElementById('inputManual');
+        const driveRadio = document.getElementById('inputDrive');
+        const manualControls = document.getElementById('manualControls');
+        const driveControls = document.getElementById('driveControls');
+        
+        const sheetUrlInput = document.getElementById('sheetUrlInput');
+        const loadDriveFilesBtn = document.getElementById('loadDriveFilesBtn');
+        const driveFileSelect = document.getElementById('driveFileSelect');
+
+        const runButton = document.getElementById('runButton');
+        const resultDiv = document.getElementById('result');
+
+        // --- Logic 1: Ẩn/hiện các khối control ---
+        function toggleControls() {
+            if (driveRadio.checked) {
+                driveControls.style.display = 'block';
+                manualControls.style.display = 'none';
+            } else {
+                driveControls.style.display = 'none';
+                manualControls.style.display = 'block';
+            }
+        }
+        manualRadio.addEventListener('change', toggleControls);
+        driveRadio.addEventListener('change', toggleControls);
+
+        // --- Logic 2: Tải danh sách file từ Drive ---
+        loadDriveFilesBtn.addEventListener('click', function() {
+            driveFileSelect.innerHTML = '<option>Loading...</option>';
+            driveFileSelect.disabled = true;
+            loadDriveFilesBtn.disabled = true;
+
+            // Gọi đến endpoint lấy danh sách file
+            fetch('/api/drive/files') // Giả sử đây là endpoint của bạn
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        driveFileSelect.innerHTML = '<option value="" selected disabled>-- Select a file --</option>';
+                        if (data.files && data.files.length > 0) {
+                            data.files.forEach(file => {
+                                const option = document.createElement('option');
+                                // QUAN TRỌNG: Giá trị của option là webViewLink (URL đầy đủ)
+                                option.value = file.webViewLink; 
+                                option.textContent = file.name;
+                                driveFileSelect.appendChild(option);
+                            });
+                            driveFileSelect.disabled = false;
+                        } else {
+                            driveFileSelect.innerHTML = '<option>-- No spreadsheet files found --</option>';
+                        }
+                    } else {
+                        driveFileSelect.innerHTML = `<option>Error: ${data.message || 'Unknown error'}</option>`;
+                    }
+                })
+                .catch(error => {
+                    driveFileSelect.innerHTML = `<option>Network Error: ${error}</option>`;
+                })
+                .finally(() => {
+                    loadDriveFilesBtn.disabled = false;
+                });
+        });
+
+        // --- Logic 3: Nút "Run Spider" chung ---
+        runButton.addEventListener('click', function() {
+            let sheetUrl = '';
+
+            // Xác định URL từ nguồn nào được chọn
+            if (manualRadio.checked) {
+                sheetUrl = sheetUrlInput.value.trim();
+            } else { // driveRadio is checked
+                sheetUrl = driveFileSelect.value;
+            }
+
+            // Kiểm tra xem đã có URL chưa
+            if (!sheetUrl) {
+                alert('Please provide a Google Sheet URL, either by pasting or selecting from Drive.');
+                return;
+            }
+
+            // Vô hiệu hóa nút và hiển thị thông báo
+            runButton.disabled = true;
+            resultDiv.innerHTML = `<div class="alert alert-info">Sending job to Scrapyd...</div>`;
+
+            // Tạo payload
+            const payload = {
+                sheet_url: sheetUrl
+            };
+
+            // GỌI ĐẾN ENDPOINT DUY NHẤT
+            fetch('/api/jobs/sheet', { // Thay bằng endpoint chạy spider sheet của bạn
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+            .then(res => res.json())
+            .then(data => {
+                // Xử lý kết quả trả về
+                if (data.status === 'success') {
+                    resultDiv.innerHTML = `
+                        <div class="alert alert-success">
+                            <strong>Job scheduled successfully!</strong><br>
+                            Spider: ${data.details.spider}<br>
+                            Job ID: ${data.details.jobid}
+                        </div>`;
+                } else {
+                    resultDiv.innerHTML = `<div class="alert alert-danger"><strong>Error:</strong> ${data.detail || data.message || 'An unknown error occurred.'}</div>`;
+                }
+            })
+            .catch(error => {
+                resultDiv.innerHTML = `<div class="alert alert-danger"><strong>Network Error:</strong> ${error}</div>`;
+            })
+            .finally(() => {
+                runButton.disabled = false; // Bật lại nút sau khi hoàn tất
+            });
+        });
+    </script>
+</body>
+</html>
