@@ -154,11 +154,11 @@ class NaverSeleniumMiddleware:
             wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, REVIEW_LIST_SELECTOR)))
         except (TimeoutException, NoSuchElementException):
             return HtmlResponse(
-            url=driver.current_url,
-            body=b"",
-            encoding="utf-8",
-            request=request
-        )
+                url=driver.current_url,
+                body=b"",
+                encoding="utf-8",
+                request=request
+            )
         
         # Sử dụng JavaScript để lấy tất cả outerHTML một lần
         body = driver.execute_script("""
@@ -178,32 +178,45 @@ class NaverSeleniumMiddleware:
         )
     
     def _go_to_review_tab(self, wait, spider, driver):
-        qna_tab = wait.until(EC.presence_of_element_located((By.ID, "QNA")))
-        driver.execute_script("arguments[0].scrollIntoView({ behavior: 'smooth', block: 'start' });", qna_tab)
-
-        time.sleep(1)
+        qna_locator = (By.ID, "QNA")
+        self.scroll_and_wait_for_element(driver, qna_locator, wait)
 
         REVIEW_TAB_SELECTOR = "div#_productFloatingTab ul li a[data-name='REVIEW']"
-        review_tab = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, REVIEW_TAB_SELECTOR)))
+        review_tab_locator = (By.CSS_SELECTOR, REVIEW_TAB_SELECTOR)
+        review_tab = self.scroll_and_wait_for_element(driver, review_tab_locator, wait)
         review_tab.click()
 
-        recent_button = wait.until(EC.element_to_be_clickable((By.XPATH, "//a[contains(text(), '최신순')]")))
-        driver.execute_script("arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });", recent_button)
-        time.sleep(1)
+        recent_button_locator = (By.XPATH, "//a[contains(text(), '최신순')]")
+        recent_button = self.scroll_and_wait_for_element(driver, recent_button_locator, wait)
         recent_button.click()
-        time.sleep(1)
 
     def _click_next_page(self, wait, page, spider, driver):
         NEXT_PAGE_SELECTOR = f"div#REVIEW div[data-shp-area-id='pgn'] a[data-shp-contents-id='{page}']"
+        next_page_locator = (By.CSS_SELECTOR, NEXT_PAGE_SELECTOR)
         try:
-            next_page_element = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, NEXT_PAGE_SELECTOR)))
-            driver.execute_script("arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });", next_page_element)
-            time.sleep(1)
+            next_page_element = self.scroll_and_wait_for_element(driver, next_page_locator, wait)
             next_page_element.click()
             time.sleep(1)
             return True
         except (NoSuchElementException, TimeoutException):
             return False
+        
+    def scroll_and_wait_for_element(self, driver, locator, wait):
+        """Combination of scrolling + WebDriverWait"""
+        
+        # Custom expected condition
+        def element_to_be_found_and_scrolled(locator):
+            def _predicate(driver):
+                try:
+                    element = driver.find_element(*locator)
+                    driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", element)
+                    return element
+                except:
+                    return False
+            return _predicate
+        
+        time.sleep(1)
+        return wait.until(element_to_be_found_and_scrolled(locator))
 
     def _get_chrome_options(self, spider):
         chrome_options = webdriver.ChromeOptions()
@@ -218,7 +231,7 @@ class NaverSeleniumMiddleware:
         # Các tùy chọn hiệu năng
         chrome_options.add_argument(f'--lang=ko-KR')
         chrome_options.add_argument("--blink-settings=imagesEnabled=false")
-        chrome_options.add_argument("--window-size=800,600")
+        chrome_options.add_argument("--window-size=1080,768")
 
         # Đọc và sử dụng hồ sơ người dùng riêng biệt
         user_data_dir = spider.settings.get('SELENIUM_USER_DATA_DIR')

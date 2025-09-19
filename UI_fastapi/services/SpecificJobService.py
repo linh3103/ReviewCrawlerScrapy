@@ -14,7 +14,11 @@ def schedule_specific_job(spider_name: str, params: dict):
     try:
         response = requests.post(schedule_url, data=payload)
         response.raise_for_status()
-        return response.json()
+
+        result = response.json()
+        result['spider'] = spider_name
+
+        return result
     except RequestException as e:
         raise ConnectionError(f"Could not connect to scrapyd.\nDetail: {e}")
 

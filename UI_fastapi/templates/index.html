@@ -13,36 +13,66 @@
             <div class="col-md-7">
                 <div class="card">
                     <div class="card-header">
-                        <h3>Run Spider from Google Sheet</h3>
+                        <h3>Run Scrapy Spider</h3>
                     </div>
                     <div class="card-body">
-                        <!-- Lựa chọn phương thức nhập liệu -->
+                        <!-- Lựa chọn Job Type -->
                         <div class="mb-4">
-                            <label class="form-label fw-bold">Input Method</label>
+                            <label class="form-label fw-bold">Job Type</label>
                             <div class="form-check">
-                                <input class="form-check-input" type="radio" name="inputType" id="inputManual" value="manual" checked>
-                                <label class="form-check-label" for="inputManual">Manual URL Input</label>
+                                <input class="form-check-input" type="radio" name="jobType" id="jobSpecific" value="specific" checked>
+                                <label class="form-check-label" for="jobSpecific">Specific Product (Manual Input)</label>
                             </div>
                             <div class="form-check">
-                                <input class="form-check-input" type="radio" name="inputType" id="inputDrive" value="drive">
-                                <label class="form-check-label" for="inputDrive">Select from Google Drive</label>
+                                <input class="form-check-input" type="radio" name="jobType" id="jobSheetUrl" value="sheet_url">
+                                <label class="form-check-label" for="jobSheetUrl">Product List (from Sheet URL)</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="jobType" id="jobDriveSelect" value="drive_select">
+                                <label class="form-check-label" for="jobDriveSelect">Product List (from Drive Select)</label>
                             </div>
                         </div>
 
-                        <!-- === Khối Nhập Thủ Công (hiển thị mặc định) === -->
-                        <div id="manualControls">
+                        <!-- === Khối 1: Specific Job Controls (hiển thị mặc định) === -->
+                        <div id="specificJobControls">
+                            <div class="mb-3">
+                                <label for="site" class="form-label">Site</label>
+                                <select id="site" class="form-select">
+                                    <option value="" selected disabled>-- Choose a site --</option>
+                                    <option value="naver">Naver</option>
+                                    <option value="coupang">Coupang</option>
+                                    <option value="ohouse">Ohou.se</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label for="brandSearch" class="form-label">Search Naver's Brand</label>
+                                <input type="text" id="brandSearch" class="form-control" placeholder="Type to filter brands..." disabled>
+                            </div>
+                            <div class="mb-3">
+                                <label for="brand" class="form-label">Brand</label>
+                                <select id="brand" class="form-select" disabled>
+                                    <option value="" selected disabled>-- Select a site first --</option>
+                                </select>
+                                <div class="form-text">Only enabled for Naver.</div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="productId" class="form-label">Product ID / Keyword</label>
+                                <input type="text" id="productId" class="form-control" placeholder="Enter Product ID or a search term">
+                            </div>
+                        </div>
+
+                        <!-- === Khối 2: Sheet URL Controls (ẩn mặc định) === -->
+                        <div id="sheetUrlControls" style="display: none;">
                             <div class="mb-3">
                                 <label for="sheetUrlInput" class="form-label">Google Sheet URL</label>
                                 <input type="text" id="sheetUrlInput" class="form-control" placeholder="Paste the full Google Sheet URL here">
                             </div>
                         </div>
 
-                        <!-- === Khối Chọn từ Drive (ẩn mặc định) === -->
-                        <div id="driveControls" style="display: none;">
+                        <!-- === Khối 3: Drive Select Controls (ẩn mặc định) === -->
+                        <div id="driveSelectControls" style="display: none;">
                             <div class="d-grid gap-2">
-                                <button id="loadDriveFilesBtn" class="btn btn-secondary mb-2" type="button">
-                                    Load Files from Drive
-                                </button>
+                                <button id="loadDriveFilesBtn" class="btn btn-secondary mb-2" type="button">Load Files from Drive</button>
                             </div>
                             <div class="mb-3">
                                 <label for="driveFileSelect" class="form-label">Select a File</label>
@@ -51,7 +81,7 @@
                                 </select>
                             </div>
                         </div>
-
+                        
                         <!-- Nút Chạy chung -->
                         <hr>
                         <button id="runButton" type="button" class="btn btn-primary w-100 mt-3">Run Spider</button>
@@ -65,49 +95,109 @@
     </div>
 
     <script>
-        // --- Lấy các Element từ DOM ---
-        const manualRadio = document.getElementById('inputManual');
-        const driveRadio = document.getElementById('inputDrive');
-        const manualControls = document.getElementById('manualControls');
-        const driveControls = document.getElementById('driveControls');
-        
+        // =========================================================================
+        // 1. LẤY CÁC ELEMENT TỪ DOM
+        // =========================================================================
+
+        // Radio Buttons để chọn Job Type
+        const jobSpecificRadio = document.getElementById('jobSpecific');
+        const jobSheetUrlRadio = document.getElementById('jobSheetUrl');
+        const jobDriveSelectRadio = document.getElementById('jobDriveSelect');
+
+        // Các khối Control chính
+        const specificJobControls = document.getElementById('specificJobControls');
+        const sheetUrlControls = document.getElementById('sheetUrlControls');
+        const driveSelectControls = document.getElementById('driveSelectControls');
+
+        // Các input và select bên trong các khối
+        const siteSelect = document.getElementById('site');
+        const brandSearchInput = document.getElementById('brandSearch');
+        const brandSelect = document.getElementById('brand');
+        const productIdInput = document.getElementById('productId');
         const sheetUrlInput = document.getElementById('sheetUrlInput');
         const loadDriveFilesBtn = document.getElementById('loadDriveFilesBtn');
         const driveFileSelect = document.getElementById('driveFileSelect');
 
+        // Các element chung
         const runButton = document.getElementById('runButton');
         const resultDiv = document.getElementById('result');
 
-        // --- Logic 1: Ẩn/hiện các khối control ---
+        // =========================================================================
+        // 2. CÁC HÀM XỬ LÝ SỰ KIỆN GIAO DIỆN
+        // =========================================================================
+
+        /**
+         * Ẩn/hiện các khối control dựa trên lựa chọn Job Type.
+         */
         function toggleControls() {
-            if (driveRadio.checked) {
-                driveControls.style.display = 'block';
-                manualControls.style.display = 'none';
-            } else {
-                driveControls.style.display = 'none';
-                manualControls.style.display = 'block';
+            specificJobControls.style.display = jobSpecificRadio.checked ? 'block' : 'none';
+            sheetUrlControls.style.display = jobSheetUrlRadio.checked ? 'block' : 'none';
+            driveSelectControls.style.display = jobDriveSelectRadio.checked ? 'block' : 'none';
+        }
+
+        /**
+         * Tải danh sách brand của Naver từ API và điền vào dropdown.
+         */
+        async function loadNaverBrands() {
+            brandSelect.innerHTML = '<option>Loading brands...</option>';
+            brandSelect.disabled = true;
+            
+            try {
+                const response = await fetch('/api/shared/naver_brands');
+                if (!response.ok) throw new Error('Failed to fetch brands');
+                
+                const brandsData = await response.json();
+                brandSelect.innerHTML = '<option value="" selected disabled>-- Choose a brand --</option>';
+                
+                for (const brandName in brandsData['naver_brands']) {
+                    const brandUrl = brandsData['naver_brands'][brandName];
+                    const option = document.createElement('option');
+                    option.value = brandName;
+                    option.textContent = `${brandName} (${brandUrl})`;
+                    brandSelect.appendChild(option);
+                }
+            } catch (error) {
+                brandSelect.innerHTML = `<option>Error loading brands</option>`;
+                console.error('Error:', error);
+            } finally {
+                brandSelect.disabled = false;
             }
         }
-        manualRadio.addEventListener('change', toggleControls);
-        driveRadio.addEventListener('change', toggleControls);
 
-        // --- Logic 2: Tải danh sách file từ Drive ---
-        loadDriveFilesBtn.addEventListener('click', function() {
+        /**
+         * Lọc danh sách brand dựa trên từ khóa tìm kiếm.
+         */
+        function filterBrands() {
+            const searchTerm = brandSearchInput.value.toLowerCase();
+            const options = brandSelect.getElementsByTagName('option');
+
+            for (const option of options) {
+                if (option.value === "") { // Luôn hiển thị placeholder
+                    option.style.display = '';
+                    continue;
+                }
+                const optionText = option.textContent.toLowerCase();
+                option.style.display = optionText.includes(searchTerm) ? '' : 'none';
+            }
+        }
+
+        /**
+         * Tải danh sách file spreadsheet từ Google Drive.
+         */
+        function loadDriveFiles() {
             driveFileSelect.innerHTML = '<option>Loading...</option>';
             driveFileSelect.disabled = true;
             loadDriveFilesBtn.disabled = true;
 
-            // Gọi đến endpoint lấy danh sách file
-            fetch('/api/drive/files') // Giả sử đây là endpoint của bạn
+            fetch('/api/drive/files')
                 .then(response => response.json())
                 .then(data => {
-                    if (data.status === 'success') {
+                    if (data.status === 'success' && data.files) {
                         driveFileSelect.innerHTML = '<option value="" selected disabled>-- Select a file --</option>';
-                        if (data.files && data.files.length > 0) {
+                        if (data.files.length > 0) {
                             data.files.forEach(file => {
                                 const option = document.createElement('option');
-                                // QUAN TRỌNG: Giá trị của option là webViewLink (URL đầy đủ)
-                                option.value = file.webViewLink; 
+                                option.value = file.webViewLink;
                                 option.textContent = file.name;
                                 driveFileSelect.appendChild(option);
                             });
@@ -116,7 +206,7 @@
                             driveFileSelect.innerHTML = '<option>-- No spreadsheet files found --</option>';
                         }
                     } else {
-                        driveFileSelect.innerHTML = `<option>Error: ${data.message || 'Unknown error'}</option>`;
+                        driveFileSelect.innerHTML = `<option>Error: ${data.detail || data.message || 'Unknown error'}</option>`;
                     }
                 })
                 .catch(error => {
@@ -125,61 +215,133 @@
                 .finally(() => {
                     loadDriveFilesBtn.disabled = false;
                 });
+        }
+
+        // =========================================================================
+        // 3. GẮN CÁC HÀM VÀO SỰ KIỆN
+        // =========================================================================
+
+        // Sự kiện thay đổi Job Type
+        jobSpecificRadio.addEventListener('change', toggleControls);
+        jobSheetUrlRadio.addEventListener('change', toggleControls);
+        jobDriveSelectRadio.addEventListener('change', toggleControls);
+        
+        // Sự kiện trong khối "Specific Job"
+        siteSelect.addEventListener('change', function() {
+            const isNaver = this.value === 'naver';
+            brandSearchInput.disabled = !isNaver;
+            brandSelect.disabled = !isNaver;
+            if (isNaver) {
+                loadNaverBrands();
+            } else {
+                brandSelect.innerHTML = '<option value="" selected disabled>-- Select a site first --</option>';
+                brandSearchInput.value = '';
+            }
         });
+        brandSearchInput.addEventListener('input', filterBrands);
+        
+        // Sự kiện trong khối "Drive Select"
+        loadDriveFilesBtn.addEventListener('click', loadDriveFiles);
 
-        // --- Logic 3: Nút "Run Spider" chung ---
+        // Sự kiện chính khi nhấn nút "Run"
         runButton.addEventListener('click', function() {
-            let sheetUrl = '';
-
-            // Xác định URL từ nguồn nào được chọn
-            if (manualRadio.checked) {
-                sheetUrl = sheetUrlInput.value.trim();
-            } else { // driveRadio is checked
-                sheetUrl = driveFileSelect.value;
-            }
-
-            // Kiểm tra xem đã có URL chưa
-            if (!sheetUrl) {
-                alert('Please provide a Google Sheet URL, either by pasting or selecting from Drive.');
-                return;
-            }
-
-            // Vô hiệu hóa nút và hiển thị thông báo
             runButton.disabled = true;
             resultDiv.innerHTML = `<div class="alert alert-info">Sending job to Scrapyd...</div>`;
 
-            // Tạo payload
-            const payload = {
-                sheet_url: sheetUrl
-            };
+            if (jobSpecificRadio.checked) {
+                runSpecificJob();
+            } else {
+                runSheetJob();
+            }
+        });
 
-            // GỌI ĐẾN ENDPOINT DUY NHẤT
-            fetch('/api/jobs/sheet', { // Thay bằng endpoint chạy spider sheet của bạn
+        // =========================================================================
+        // 4. LOGIC CHÍNH ĐỂ GỌI API
+        // =========================================================================
+
+        /**
+         * Gửi yêu cầu chạy một spider cụ thể (Naver, Coupang, Ohouse).
+         */
+        function runSpecificJob() {
+            const site = siteSelect.value;
+            const brand = brandSelect.value;
+            const productId = productIdInput.value.trim();
+
+            if (!site || !productId) {
+                alert('Site and Product ID are required for this job type.');
+                finalizeRun();
+                return;
+            }
+            if (site === 'naver' && !brand) {
+                alert('Brand is required for Naver.');
+                finalizeRun();
+                return;
+            }
+
+            const payload = { site, brand, product_id: productId };
+            fetch('/api/jobs/specific', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             })
-            .then(res => res.json())
-            .then(data => {
-                // Xử lý kết quả trả về
-                if (data.status === 'success') {
-                    resultDiv.innerHTML = `
-                        <div class="alert alert-success">
-                            <strong>Job scheduled successfully!</strong><br>
-                            Spider: ${data.details.spider}<br>
-                            Job ID: ${data.details.jobid}
-                        </div>`;
-                } else {
-                    resultDiv.innerHTML = `<div class="alert alert-danger"><strong>Error:</strong> ${data.detail || data.message || 'An unknown error occurred.'}</div>`;
-                }
+            .then(res => res.json()).then(handleResponse).catch(handleError).finally(finalizeRun);
+        }
+
+        /**
+         * Gửi yêu cầu chạy spider product_list từ một URL.
+         */
+        function runSheetJob() {
+            let sheetUrl = '';
+            if (jobSheetUrlRadio.checked) {
+                sheetUrl = sheetUrlInput.value.trim();
+            } else { // driveSelectRadio is checked
+                sheetUrl = driveFileSelect.value;
+            }
+
+            if (!sheetUrl) {
+                alert('A Google Sheet URL is required for this job type.');
+                finalizeRun();
+                return;
+            }
+
+            const payload = { sheet_url: sheetUrl };
+            fetch('/api/jobs/sheet', { // Đảm bảo endpoint này tồn tại
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
             })
-            .catch(error => {
-                resultDiv.innerHTML = `<div class="alert alert-danger"><strong>Network Error:</strong> ${error}</div>`;
-            })
-            .finally(() => {
-                runButton.disabled = false; // Bật lại nút sau khi hoàn tất
-            });
-        });
+            .then(res => res.json()).then(handleResponse).catch(handleError).finally(finalizeRun);
+        }
+
+        // =========================================================================
+        // 5. CÁC HÀM TRỢ GIÚP
+        // =========================================================================
+
+        /**
+         * Xử lý và hiển thị kết quả trả về từ API.
+         */
+        function handleResponse(data) {
+            if (data.status === 'success') {
+                const details = data.details || {}; // An toàn hơn nếu details không tồn tại
+                resultDiv.innerHTML = `<div class="alert alert-success"><strong>Job scheduled successfully!</strong><br>Spider: ${details.spider}<br>Job ID: ${details.jobid}</div>`;
+            } else {
+                resultDiv.innerHTML = `<div class="alert alert-danger"><strong>Error:</strong> ${data.detail || data.message || 'An unknown error occurred.'}</div>`;
+            }
+        }
+
+        /**
+         * Hiển thị lỗi mạng.
+         */
+        function handleError(error) {
+            resultDiv.innerHTML = `<div class="alert alert-danger"><strong>Network Error:</strong> ${error}</div>`;
+        }
+
+        /**
+         * Kích hoạt lại nút "Run" sau khi request hoàn tất.
+         */
+        function finalizeRun() {
+            runButton.disabled = false;
+        }
     </script>
 </body>
 </html>

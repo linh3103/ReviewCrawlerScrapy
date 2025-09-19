@@ -31,8 +31,8 @@ class ExcelExportPipeline:
         # Chuyển set thành list để có thể sắp xếp
         sorted_option_keys = list(option_keys)
 
-        # YÊU CẦU 2: Nếu spider là Coupang_Spider, sắp xếp các cột option
-        if spider.name == 'Coupang_Spider':
+        # YÊU CẦU 2: Nếu spider là Coupang_spider, sắp xếp các cột option
+        if spider.name == SpiderName.COUPANG_SPIDER.value:
             # Hàm key để trích xuất số từ 'option_1', 'option_2',...
             # Điều này đảm bảo 'option_10' đứng sau 'option_9'
             def sort_key(key):

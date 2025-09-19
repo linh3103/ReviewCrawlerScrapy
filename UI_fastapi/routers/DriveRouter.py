@@ -8,4 +8,9 @@ router = APIRouter(
 
 @router.get("/files")
 async def load_files_from_drive():
-    return get_files()
+    files = get_files()
+
+    return {
+        'status': 'success',
+        'files': files
+    }
